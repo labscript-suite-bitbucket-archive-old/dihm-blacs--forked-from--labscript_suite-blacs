@@ -465,20 +465,36 @@ V</string>
    <property name="text">
     <string>Load front-panel</string>
    </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>:/qtutils/fugue/folder-open.png</normaloff>:/qtutils/fugue/folder-open.png</iconset>
+   </property>
   </action>
   <action name="actionSave">
    <property name="text">
     <string>Save front-panel</string>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>:/qtutils/fugue/disk--plus.png</normaloff>:/qtutils/fugue/disk--plus.png</iconset>
    </property>
   </action>
   <action name="actionExit">
    <property name="text">
     <string>Exit</string>
    </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>:/qtutils/fugue/cross-button.png</normaloff>:/qtutils/fugue/cross-button.png</iconset>
+   </property>
   </action>
   <action name="actionOpenPreferences">
    <property name="text">
     <string>Preferences</string>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>:/qtutils/fugue/gear--pencil.png</normaloff>:/qtutils/fugue/gear--pencil.png</iconset>
    </property>
   </action>
   <action name="actionAdd_to_queue">
