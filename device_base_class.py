@@ -45,6 +45,7 @@ class DeviceTab(Tab):
         self._DO = {}
         self._DDS = {}
         self._image = {}
+        self._devProp = {}
         
         self._final_values = {}
         self._last_programmed_values = {}
@@ -155,6 +156,15 @@ class DeviceTab(Tab):
     #                             },
     #                     }
     #
+    #    device_properties = {'device_property':{'default':value,
+    #                                            'type':'num',
+    #                                            'min':0,
+    #                                            'max':1,
+    #                                            'base_unit':'V',
+    #                                            'step':0.1,
+    #                                            'decimals':1},
+    #                         'device_property2'}:{'default':value,
+    #                                              'type':'bool'}    
     def create_digital_outputs(self,digital_properties):
         for hardware_name,properties in digital_properties.items():
             # Save the DO object
@@ -226,7 +236,39 @@ class DeviceTab(Tab):
                 sub_chnls['gate'] = self._create_DO_object(connection_name,hardware_name+'_gate','gate',properties)
             
             self._DDS[hardware_name] = DDS(hardware_name,connection_name,sub_chnls)
+
+    def create_device_properties(self,device_properties):
+        for dev_prop, properties in device_properties.items():
+            self._devProp[dev_prop] = self._create_device_property_object(self.device_name,dev_prop,properties)
+
+    def _create_device_property_object(self,parent_device,device_property,properties):
+        if properties['type'] == 'num':
+            calib_class = None
+            calib_params = {}
+            return AO(device_property,'-',self.device_name,self.program_device_properties,self.settings,calib_class,calib_params,
+                    properties['base_unit'], properties['min'],properties['max'],properties['step'],properties['decimals'])
+        elif properties['type'] == 'bool':
+            return DO(device_property, '-', self.device_name, self.program_device_properties, self.settings)
+        else:
+            raise RuntimeError(f"Property '{device_property}' of type '{properties['type']}' is not supported.")
     
+    def create_property_widgets(self,device_properties):
+        widgets = {}
+        for dev_prop, properties in device_properties.items():
+            typ = properties['type']
+            if typ == 'num':
+                properties.setdefault('display_name',None)
+                properties.setdefault('horizontal_alignment',False)
+                properties.setdefault('parent',None)
+                widgets[dev_prop] = self._devProp[dev_prop].create_widget(properties['display_name'],properties['horizontal_alignment'],properties['parent'])
+            else:
+                properties.setdefault('args',[])
+                properties.setdefault('kwargs',{})
+                widgets[dev_prop] = self._devProp[dev_prop].create_widget(*properties['args'],**properties['kwargs'])
+
+        return widgets
+
+
     def get_child_from_connection_table(self, parent_device_name, port):
         return self.connection_table.find_child(parent_device_name, port)
     
@@ -380,6 +422,9 @@ class DeviceTab(Tab):
     def get_front_panel_values(self):
         return {channel:item.value for output in [self._AO,self._DO,self._image,self._DDS] for channel,item in output.items()}
     
+    def get_front_panel_properties(self):
+        return {device_property:item.value for device_property,item in self._devProp.items()}
+
     def get_channel(self,channel):
         if channel in self._AO:
             return self._AO[channel]
@@ -389,6 +434,12 @@ class DeviceTab(Tab):
             return self._image[channel]
         elif channel in self._DDS:
             return self._DDS[channel]
+        else:
+            return None
+
+    def get_property(self,property):
+        if property in self._devProp:
+            return self._devProp[property]
         else:
             return None
             
@@ -425,6 +476,38 @@ class DeviceTab(Tab):
             
                         # Update the last_programmed_values            
                         self._last_programmed_values[channel] = remote_value
+
+    # state machine method for programming device properties
+    @define_state(MODE_MANUAL,True,delete_stale_states=True)
+    def program_device_properties(self):
+        self._last_programmed_properties = self.get_front_panel_properties()
+
+        # get rid of any "remote values changed" dialog
+        self._changed_widget.hide()
+
+        results = yield(self.queue_work(self._primary_worker,'program_properties',self._last_programmed_properties))
+        for worker in self._secondary_workers:
+            if results:
+                returned_results = yield(self.queue_work(worker,'program_properties',self._last_programmed_properties))
+                results.update(returned_results)
+
+        # If the worker process returns something, we assume it wants us to coerce the front panel values
+        if results:
+            for device_property,remote_value in results.items():
+                if device_property not in self._last_programmed_properties:
+                    raise RuntimeError('The worker function program_properties for device %s is returning data for device property %s but the BLACS tab is not programmed to handle this property'%(self.device_name,device_property))
+                
+                prop = self.get_property(device_property)
+                if prop is None:
+                    raise RuntimeError('The device property %s on device %s is in the last programmed values, but is not in the devProp store. Something has gone badly wrong!'%(device_property,self.device_name))
+                else:                    
+                    # TODO: Only do this if the front panel values match what we asked to program (eg, the user hasn't changed the value since)
+                    if prop.value == self._last_programmed_properties[device_property]:
+                        prop.set_value(remote_value,program=False)
+            
+                        # Update the last_programmed_values            
+                        self._last_programmed_properties[prop] = remote_value
+
     
     @define_state(MODE_MANUAL,True)
     def check_remote_values(self):
