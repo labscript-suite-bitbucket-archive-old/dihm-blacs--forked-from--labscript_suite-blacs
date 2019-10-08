@@ -28,6 +28,7 @@ from labscript_utils.qtwidgets.analogoutput import AnalogOutput
 from labscript_utils.qtwidgets.digitaloutput import DigitalOutput, InvertedDigitalOutput
 from labscript_utils.qtwidgets.ddsoutput import DDSOutput
 from labscript_utils.qtwidgets.imageoutput import ImageOutput
+from labscript_utils.qtwidgets.enumoutput import EnumOutput
 try:
     from labscript_utils.unitconversions import *
 except Exception:
@@ -754,6 +755,155 @@ class DDS(object):
     @property
     def name(self):
         return self._hardware_name + ' - ' + self._connection_name
+
+class EO(object):
+    """Enumeration Output object for control of device properties that only allow
+    discrete values."""
+    def __init__(self, hardware_name, connection_name, device_name, program_function, settings, options):
+        self._hardware_name = hardware_name
+        self._connection_name = connection_name
+        self._widget_list = []
+
+        self._device_name = device_name
+        self._logger = logging.getLogger('BLACS.%s.%s'%(self._device_name,hardware_name))
+
+        # Note that while we could store self._current_value and self._locked in the
+        # settings dictionary, this dictionary is available to other parts of BLACS
+        # and using separate variables avoids those parts from being able to directly
+        # influence behaviour (the worst they can do is change the value used on initialisation)
+        self._locked = False
+        if isinstance(options,dict) or isinstance(options,list) or isinstance(options,tuple):
+            self._current_value = sorted(options)[0]
+            self._current_index = 0
+            print('initial current value is',self._current_value)
+        self._options = options
+        self._program_device = program_function
+        self._update_from_settings(settings)
+
+    def _update_from_settings(self,settings,program=True):
+        # Build up settings dictionary if it doesn't exist
+        if not isinstance(settings,dict):
+            settings = {}
+        if 'front_panel_settings' not in settings or not isinstance(settings['front_panel_settings'],dict):
+            settings['front_panel_settings'] = {}
+        if self._hardware_name not in settings['front_panel_settings'] or not isinstance(settings['front_panel_settings'][self._hardware_name],dict):
+            settings['front_panel_settings'][self._hardware_name] = {}
+        # Set default values if they are not already saved in the settings dictionary
+        if 'base_value' not in settings['front_panel_settings'][self._hardware_name]:
+            settings['front_panel_settings'][self._hardware_name]['base_value'] = self._current_index
+        if 'locked' not in settings['front_panel_settings'][self._hardware_name]:
+            settings['front_panel_settings'][self._hardware_name]['locked'] = False
+        if 'name' not in settings['front_panel_settings'][self._hardware_name]:
+            settings['front_panel_settings'][self._hardware_name]['name'] = self._connection_name
+
+        # only keep a reference to the part of the settings dictionary relevant to this DO
+        self._settings = settings['front_panel_settings'][self._hardware_name]
+    
+        # Update the state of the button
+        self.set_index(int(self._settings['base_value']),program=program)
+
+        # Update the lock state
+        self._update_lock(self._settings['locked'])
+
+    def create_widget(self, display_name=None, horizontal_alignment=False):
+        widget = EnumOutput(self._hardware_name,self._connection_name,
+                            display_name,horizontal_alignment)
+        self.add_widget(widget)
+        return widget
+
+    def add_widget(self,widget):
+        if widget in self._widget_list:
+            return False
+
+        self._widget_list.append(widget)
+
+        # make sure the widget knows about this EO
+        widget.set_EO(self,True,False)
+        # use options from the EO to set the combobox
+        widget.set_options(self._options)
+
+        # Connect widget signal to EO slot
+        widget.connect_value_change(self.set_value)
+        print('Value goint to set_value is',self._current_value)
+        self.set_value(self._current_value,False)
+        # Update lock state of widgets
+        self._update_lock(self._locked)
+
+        return True
+
+    def remove_widget(self, widget):
+        if widget not in self._widget_list:
+            msg = '''Widget cannot be removed because it is not registered 
+                    with the EO object %s'''
+            raise RuntimeError(msg % (self._hardware_name))
+
+        widget.disconnect_value_change()
+        self._widget_list.remove(widget)
+
+    @property
+    def value(self):
+        return self._current_value
+
+    def lock(self):
+        self._update_lock(True)
+
+    def unlock(self):
+        self._update_lock(False)
+
+    def _update_lock(self,locked):
+        self._locked = locked
+        for widget in self._widget_list:
+            if locked:
+                widget.lock(False)
+            else:
+                widget.unlock(False)
+
+        self._settings['locked'] = locked
+
+    def set_value(self,value,program=True):
+
+        self._current_value = value
+        curr_index = None
+
+        if program:
+            self._logger.debug('program device called')
+            self._program_device()
+
+        for widget in self._widget_list:
+            if value != widget.selected_option:
+                widget.block_combobox_signals()
+                widget.selected_option = value
+                curr_index = widget.selected_index
+                widget.unblock_combobox_signals() 
+
+        if curr_index is not None:
+            self._settings['base_value'] = curr_index
+
+    def set_index(self,index,program=True):
+        
+        self._current_index = index
+        self._settings['base_value'] = index
+        curr_value = None
+
+        if program:
+            self._logger.debug('program device called')
+            self._program_device()
+
+        for widget in self._widget_list:
+            if index != widget.selected_index:
+                widget.block_combobox_signals()
+                widget.selected_index = index
+                curr_value = widget.selected_option
+                widget.unblock_combobox_signals() 
+
+        if curr_value is not None:
+            self._current_value = curr_value
+
+
+    @property
+    def name(self):
+        return self._hardware_name + ' - ' + self._connection_name
+    
         
 if __name__ == '__main__':
     from labscript_utils.qtwidgets.toolpalette import ToolPaletteGroup
@@ -767,7 +917,8 @@ if __name__ == '__main__':
     layout.addWidget(widget)
     tpg = ToolPaletteGroup(widget)
     toolpalette = tpg.append_new_palette('Digital Outputs')    
-    toolpalette2 = tpg.append_new_palette('Analog Outputs')    
+    toolpalette2 = tpg.append_new_palette('Analog Outputs')
+    toolpalette3 = tpg.append_new_palette('Enum Outputs')    
     layout.addItem(QSpacerItem(0,0,QSizePolicy.Minimum,QSizePolicy.MinimumExpanding))
     
     # create settings dictionary
@@ -781,7 +932,11 @@ if __name__ == '__main__':
                         'locked':False,
                         'base_step_size':0.1,
                         'current_units':'V',
-                        }
+                        },
+                    'property0':{
+                        'base_value':0, #must be a number to save in settings, this is index of comboBox
+                        'locked':False
+                    }
                 }
         }
     
@@ -789,7 +944,8 @@ if __name__ == '__main__':
         print('program_function called')
 
     # Create a DO object
-    my_DO = DO(hardware_name='do0', connection_name='my first digital output', program_function=print_something, settings=settings)
+    my_DO = DO(hardware_name='do0', connection_name='my first digital output', device_name='device', 
+                program_function=print_something, settings=settings)
     
     # Link in two DO widgets
     button1 = DigitalOutput('do0\nmy first digital output')
@@ -814,8 +970,21 @@ if __name__ == '__main__':
     toolpalette2.addWidget(analog2)
     
     # TODO: Add in test case for DDS
+
+    # Create EO object
+    test_options = ['option 1','option 2']
+    my_EO = EO(hardware_name='property0',connection_name='test property',device_name='device',
+                program_function=print_something, settings=settings,options=test_options)
+
+    enum1 = EnumOutput('Enumerate',display_name='Test Enumerable',
+                        horizontal_alignment=True)
+    # linked enum with different layout
+    enum2 = EnumOutput('Enumerate2')
+    my_EO.add_widget(enum1)
+    my_EO.add_widget(enum2)
+    toolpalette3.addWidget(enum1)
+    toolpalette3.addWidget(enum2)
     
     
     window.show()
     sys.exit(qapplication.exec_())
-    
