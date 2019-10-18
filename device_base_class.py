@@ -30,7 +30,7 @@ from qtutils import UiLoader
 from blacs import BLACS_DIR
 from blacs.tab_base_classes import Tab, Worker, define_state
 from blacs.tab_base_classes import MODE_MANUAL, MODE_TRANSITION_TO_BUFFERED, MODE_TRANSITION_TO_MANUAL, MODE_BUFFERED
-from blacs.output_classes import AO, DO, DDS, Image
+from blacs.output_classes import AO, DO, DDS, Image, EO
 from labscript_utils.qtwidgets.toolpalette import ToolPaletteGroup
 from labscript_utils.shared_drive import path_to_agnostic
 
@@ -242,15 +242,18 @@ class DeviceTab(Tab):
             self._devProp[dev_prop] = self._create_device_property_object(self.device_name,dev_prop,properties)
 
     def _create_device_property_object(self,parent_device,device_property,properties):
-        if properties['type'] == 'num':
+        typ = properties['type']
+        if typ == 'num':
             calib_class = None
             calib_params = {}
             return AO(device_property,'-',self.device_name,self.program_device_properties,self.settings,calib_class,calib_params,
                     properties['base_unit'], properties['min'],properties['max'],properties['step'],properties['decimals'])
-        elif properties['type'] == 'bool':
+        elif typ == 'bool':
             return DO(device_property, '-', self.device_name, self.program_device_properties, self.settings)
+        elif typ == 'enum':
+            return EO(device_property, '-', self.device_name, self.program_device_properties, self.settings,properties['options'])
         else:
-            raise RuntimeError(f"Property '{device_property}' of type '{properties['type']}' is not supported.")
+            raise RuntimeError(f"Property '{device_property}' of type '{typ}' is not supported.")
     
     def create_property_widgets(self,device_properties):
         widgets = {}
@@ -261,13 +264,17 @@ class DeviceTab(Tab):
                 properties.setdefault('horizontal_alignment',False)
                 properties.setdefault('parent',None)
                 widgets[dev_prop] = self._devProp[dev_prop].create_widget(properties['display_name'],properties['horizontal_alignment'],properties['parent'])
+            if typ == 'enum':
+                properties.setdefault('display_name',None)
+                properties.setdefault('horizontal_alignment',False)
+                properties.setdefault('options',{})
+                widgets[dev_prop] = self._devProp[dev_prop].create_widget(properties['display_name'],properties['horizontal_alignment'])
             else:
                 properties.setdefault('args',[])
                 properties.setdefault('kwargs',{})
                 widgets[dev_prop] = self._devProp[dev_prop].create_widget(*properties['args'],**properties['kwargs'])
 
         return widgets
-
 
     def get_child_from_connection_table(self, parent_device_name, port):
         return self.connection_table.find_child(parent_device_name, port)
