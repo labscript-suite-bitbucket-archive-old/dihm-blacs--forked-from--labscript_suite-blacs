@@ -36,7 +36,8 @@ except Exception:
 
 
 class AO(object):
-    def __init__(self, hardware_name, connection_name, device_name, program_function, settings, calib_class, calib_params, default_units, min, max, step, decimals):
+    def __init__(self, hardware_name, connection_name, device_name, program_function, settings, 
+                    calib_class, calib_params, default_units, min, max, step, decimals, default_value=0):
         self._connection_name = connection_name
         self._hardware_name = hardware_name
         self._device_name = device_name
@@ -49,7 +50,7 @@ class AO(object):
         self._program_device = program_function
         
         # All of these are in base units ALWAYS
-        self._current_value = 0 # value in base units
+        self._current_value = default_value # value in base units
         self._current_step_size = step # step size in current units
         self._step_size = step # step size in base units
         self._limits = [min,max]
@@ -102,7 +103,7 @@ class AO(object):
             settings['front_panel_settings'][self._hardware_name] = {}
         # Set default values if they are not already saved in the settings dictionary
         if 'base_value' not in settings['front_panel_settings'][self._hardware_name]:
-            settings['front_panel_settings'][self._hardware_name]['base_value'] = False
+            settings['front_panel_settings'][self._hardware_name]['base_value'] = self._current_value
         if 'locked' not in settings['front_panel_settings'][self._hardware_name]:
             settings['front_panel_settings'][self._hardware_name]['locked'] = False
         if 'base_step_size' not in settings['front_panel_settings'][self._hardware_name]:
@@ -438,7 +439,7 @@ class AO(object):
         return self._hardware_name + ' - ' + self._connection_name
             
 class DO(object):
-    def __init__(self, hardware_name, connection_name, device_name, program_function, settings):
+    def __init__(self, hardware_name, connection_name, device_name, program_function, settings, default_value=False):
         self._hardware_name = hardware_name
         self._connection_name = connection_name
         self._widget_list = []
@@ -451,7 +452,7 @@ class DO(object):
         # and using separate variables avoids those parts from being able to directly
         # influence behaviour (the worst they can do is change the value used on initialisation)
         self._locked = False
-        self._current_state = False
+        self._current_state = default_value
         self._program_device = program_function
         self._update_from_settings(settings)
     
@@ -465,7 +466,7 @@ class DO(object):
             settings['front_panel_settings'][self._hardware_name] = {}
         # Set default values if they are not already saved in the settings dictionary
         if 'base_value' not in settings['front_panel_settings'][self._hardware_name]:
-            settings['front_panel_settings'][self._hardware_name]['base_value'] = False
+            settings['front_panel_settings'][self._hardware_name]['base_value'] = self._current_state
         if 'locked' not in settings['front_panel_settings'][self._hardware_name]:
             settings['front_panel_settings'][self._hardware_name]['locked'] = False
         if 'name' not in settings['front_panel_settings'][self._hardware_name]:
