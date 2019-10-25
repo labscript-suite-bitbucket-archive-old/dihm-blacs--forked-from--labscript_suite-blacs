@@ -759,7 +759,8 @@ class DDS(object):
 class EO(object):
     """Enumeration Output object for control of device properties that only allow
     discrete values."""
-    def __init__(self, hardware_name, connection_name, device_name, program_function, settings, options):
+    def __init__(self, hardware_name, connection_name, device_name, program_function, 
+                    settings, options, default_value):
         self._hardware_name = hardware_name
         self._connection_name = connection_name
         self._widget_list = []
@@ -767,15 +768,45 @@ class EO(object):
         self._device_name = device_name
         self._logger = logging.getLogger('BLACS.%s.%s'%(self._device_name,hardware_name))
 
+        # populate combobox model from options
+        self._comboboxmodel = QStandardItemModel()
+        if isinstance(options,list) or isinstance(options,tuple):
+            # use input order to populate model for list or tuple
+            for i,key in enumerate(options):
+                item = QStandardItem(key)
+                item.setData(i,Qt.UserRole)
+                self._comboboxmodel.appendRow(item)
+        elif isinstance(options,dict):
+            # python >3.7 preserves input dictionary ordering
+            # for general compatibility, index must be an integer
+            for key,val in options.items():
+                item = QStandardItem(key)
+                if type(val) == dict:
+                    # allow for tooltip definition of options
+                    item.setData(int(val['index']),Qt.UserRole)
+                    item.setData(val['tooltip'],Qt.ToolTipRole)
+                else:
+                    item.setData(int(val),Qt.UserRole)
+                self._comboboxmodel.appendRow(item)
+
+        else:
+            msg = """'options' is not a list, tuple, or dictionary"""
+            self._logger.error(msg)
+
         # Note that while we could store self._current_value and self._locked in the
         # settings dictionary, this dictionary is available to other parts of BLACS
         # and using separate variables avoids those parts from being able to directly
         # influence behaviour (the worst they can do is change the value used on initialisation)
         self._locked = False
-        if isinstance(options,dict) or isinstance(options,list) or isinstance(options,tuple):
-            self._current_value = sorted(options)[0]
-            self._current_index = 0
-            print('initial current value is',self._current_value)
+        # populate self._current_value and self._current_index from default value
+        default_item = self._comboboxmodel.findItems(default_value)[0]
+        if default_item:
+            self._current_value = default_value
+            self._current_index = default_item.data(Qt.UserRole)
+        else:
+            msg = "default_value not in options"
+            self._logger.error(msg)
+
         self._options = options
         self._program_device = program_function
         self._update_from_settings(settings)
@@ -805,9 +836,9 @@ class EO(object):
         # Update the lock state
         self._update_lock(self._settings['locked'])
 
-    def create_widget(self, display_name=None, horizontal_alignment=False):
+    def create_widget(self, display_name=None, horizontal_alignment=False,parent=None):
         widget = EnumOutput(self._hardware_name,self._connection_name,
-                            display_name,horizontal_alignment)
+                            display_name,horizontal_alignment,parent)
         self.add_widget(widget)
         return widget
 
@@ -820,11 +851,10 @@ class EO(object):
         # make sure the widget knows about this EO
         widget.set_EO(self,True,False)
         # use options from the EO to set the combobox
-        widget.set_options(self._options)
+        widget.set_combobox_model(self._comboboxmodel)
 
         # Connect widget signal to EO slot
         widget.connect_value_change(self.set_value)
-        print('Value goint to set_value is',self._current_value)
         self.set_value(self._current_value,False)
         # Update lock state of widgets
         self._update_lock(self._locked)
@@ -838,6 +868,7 @@ class EO(object):
             raise RuntimeError(msg % (self._hardware_name))
 
         widget.disconnect_value_change()
+        widget.set_combobox_model(QStandardItemModel())
         self._widget_list.remove(widget)
 
     @property
@@ -861,9 +892,11 @@ class EO(object):
         self._settings['locked'] = locked
 
     def set_value(self,value,program=True):
-
         self._current_value = value
-        curr_index = None
+        items = self._comboboxmodel.findItems(value)
+        if items:
+            self._current_index = items[0].data(Qt.UserRole)
+            self._settings['base_value'] = self._current_index
 
         if program:
             self._logger.debug('program device called')
@@ -873,17 +906,19 @@ class EO(object):
             if value != widget.selected_option:
                 widget.block_combobox_signals()
                 widget.selected_option = value
-                curr_index = widget.selected_index
                 widget.unblock_combobox_signals() 
 
-        if curr_index is not None:
-            self._settings['base_value'] = curr_index
-
     def set_index(self,index,program=True):
-        
         self._current_index = index
         self._settings['base_value'] = index
-        curr_value = None
+        # find option corresponding to index
+        indecies = self._comboboxmodel.match(self._comboboxmodel.index(0,0),Qt.UserRole,index,1,
+                                                Qt.MatchExactly|Qt.MatchWrap)
+        if indecies:
+            self._current_value = self._comboboxmodel.itemFromIndex(indecies[0]).text() 
+        else:
+            msg = f"""Index {index} not found in model"""
+            raise RuntimeError(msg)
 
         if program:
             self._logger.debug('program device called')
@@ -893,12 +928,7 @@ class EO(object):
             if index != widget.selected_index:
                 widget.block_combobox_signals()
                 widget.selected_index = index
-                curr_value = widget.selected_option
-                widget.unblock_combobox_signals() 
-
-        if curr_value is not None:
-            self._current_value = curr_value
-
+                widget.unblock_combobox_signals()
 
     @property
     def name(self):
@@ -963,7 +993,7 @@ if __name__ == '__main__':
     
     # link in two AO widgets
     analog1 = AnalogOutput('AO1')
-    analog2 = AnalogOutput('AO1 copy')
+    analog2 = AnalogOutput('AO1 copy',display_name='Linked AO1 Widget')
     my_AO.add_widget(analog1)
     my_AO.add_widget(analog2)
     toolpalette2.addWidget(analog1)
@@ -974,7 +1004,7 @@ if __name__ == '__main__':
     # Create EO object
     test_options = ['option 1','option 2']
     my_EO = EO(hardware_name='property0',connection_name='test property',device_name='device',
-                program_function=print_something, settings=settings,options=test_options)
+                program_function=print_something, settings=settings,options=test_options,default_value='option 2')
 
     enum1 = EnumOutput('Enumerate',display_name='Test Enumerable',
                         horizontal_alignment=True)
@@ -984,6 +1014,17 @@ if __name__ == '__main__':
     my_EO.add_widget(enum2)
     toolpalette3.addWidget(enum1)
     toolpalette3.addWidget(enum2)
+
+    # Create second EO object with fancier options
+    test_options2 = {'option 1':{'index':0,'tooltip':'Option 1 Description'},
+                     'option 2':{'index':3,'tooltip':'Option 2 Description'},
+                     'option 3':1} #tooltips are optional, only pass index if not using them
+    my_EO2 = EO(hardware_name='property1',connection_name='test property2',device_name='device',
+                    program_function=print_something, settings=settings,options=test_options2,default_value='option 3')
+    enum3 = EnumOutput('Enumerate3',display_name='Detailed options enumerable',
+                        horizontal_alignment=True)
+    my_EO2.add_widget(enum3)
+    toolpalette3.addWidget(enum3)
     
     
     window.show()
