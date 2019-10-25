@@ -251,7 +251,7 @@ class DeviceTab(Tab):
         elif typ == 'bool':
             return DO(device_property, '-', self.device_name, self.program_device_properties, self.settings)
         elif typ == 'enum':
-            return EO(device_property, '-', self.device_name, self.program_device_properties, self.settings,properties['options'])
+            return EO(device_property, '-', self.device_name, self.program_device_properties, self.settings, properties['options'], properties['default'])
         else:
             raise RuntimeError(f"Property '{device_property}' of type '{typ}' is not supported.")
     
@@ -260,13 +260,14 @@ class DeviceTab(Tab):
         for dev_prop, properties in device_properties.items():
             typ = properties['type']
             if typ == 'num':
-                properties.setdefault('display_name',None)
+                properties.setdefault('display_name',dev_prop)
                 properties.setdefault('horizontal_alignment',False)
                 properties.setdefault('parent',None)
                 widgets[dev_prop] = self._devProp[dev_prop].create_widget(properties['display_name'],properties['horizontal_alignment'],properties['parent'])
-            if typ == 'enum':
-                properties.setdefault('display_name',None)
+            elif typ == 'enum':
+                properties.setdefault('display_name',dev_prop)
                 properties.setdefault('horizontal_alignment',False)
+                properties.setdefault('parent',None)
                 properties.setdefault('options',{})
                 widgets[dev_prop] = self._devProp[dev_prop].create_widget(properties['display_name'],properties['horizontal_alignment'])
             else:
