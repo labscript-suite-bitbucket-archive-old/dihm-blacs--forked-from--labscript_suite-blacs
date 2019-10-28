@@ -54,12 +54,14 @@ class DeviceTab(Tab):
         self._secondary_workers = []
         self._can_check_remote_values = False
         self._changed_radio_buttons = {}
+        self._last_programmed_properties = {}
         
         # Call the initialise GUI function
         self.initialise_GUI() 
         self.restore_save_data(self.settings['saved_data'] if 'saved_data' in self.settings else {})
         self.initialise_workers()
         self._last_programmed_values = self.get_front_panel_values()
+        self._last_programmed_properties = self.get_front_panel_properties()
         if self._can_check_remote_values:
             self.statemachine_timeout_add(30000,self.check_remote_values)     
         else:       
@@ -163,8 +165,23 @@ class DeviceTab(Tab):
     #                                            'base_unit':'V',
     #                                            'step':0.1,
     #                                            'decimals':1},
-    #                         'device_property2'}:{'default':value,
-    #                                              'type':'bool'}    
+    #                         'device_property2':{'default':value,
+    #                                              'type':'bool'},
+    #                         'device_property3':{'default':'value',
+    #                                             'type':'enum',
+    #                                             'return_type':'index',
+    #                                             'options':['option1','option2']},
+    #                         'device_property4':{'default':'value',
+    #                                             'type':'enum',
+    #                                             'return_type':'index',
+    #                                             'options':{'option1':0,'option2':5}},
+    #                         'device_property3':{'default':'value',
+    #                                             'type':'enum',
+    #                                             'return_type':'index',
+    #                                             'options':{
+    #                                                   'option1':{'index':0,'tooltip':'Description1'},
+    #                                                   'option2':{'index':3,'tooltip':'Description2'}}
+    #                           }    
     def create_digital_outputs(self,digital_properties):
         for hardware_name,properties in digital_properties.items():
             # Save the DO object
