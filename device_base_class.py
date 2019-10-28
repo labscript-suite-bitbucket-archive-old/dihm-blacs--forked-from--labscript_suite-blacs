@@ -247,9 +247,9 @@ class DeviceTab(Tab):
             calib_class = None
             calib_params = {}
             return AO(device_property,'-',self.device_name,self.program_device_properties,self.settings,calib_class,calib_params,
-                    properties['base_unit'], properties['min'],properties['max'],properties['step'],properties['decimals'])
+                    properties['base_unit'], properties['min'],properties['max'],properties['step'],properties['decimals'],properties['default'])
         elif typ == 'bool':
-            return DO(device_property, '-', self.device_name, self.program_device_properties, self.settings)
+            return DO(device_property, '-', self.device_name, self.program_device_properties, self.settings, properties['default'])
         elif typ == 'enum':
             return EO(device_property, '-', self.device_name, self.program_device_properties, self.settings, properties['options'], properties['default'])
         else:
@@ -268,8 +268,7 @@ class DeviceTab(Tab):
                 properties.setdefault('display_name',dev_prop)
                 properties.setdefault('horizontal_alignment',False)
                 properties.setdefault('parent',None)
-                properties.setdefault('options',{})
-                widgets[dev_prop] = self._devProp[dev_prop].create_widget(properties['display_name'],properties['horizontal_alignment'])
+                widgets[dev_prop] = self._devProp[dev_prop].create_widget(properties['display_name'],properties['horizontal_alignment'],properties['parent'])
             else:
                 properties.setdefault('args',[])
                 properties.setdefault('kwargs',{})
