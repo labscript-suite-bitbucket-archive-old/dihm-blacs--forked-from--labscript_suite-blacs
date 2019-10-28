@@ -251,7 +251,8 @@ class DeviceTab(Tab):
         elif typ == 'bool':
             return DO(device_property, '-', self.device_name, self.program_device_properties, self.settings, properties['default'])
         elif typ == 'enum':
-            return EO(device_property, '-', self.device_name, self.program_device_properties, self.settings, properties['options'], properties['default'])
+            return EO(device_property, '-', self.device_name, self.program_device_properties, self.settings, 
+                        properties['options'], properties['return_type'], properties['default'])
         else:
             raise RuntimeError(f"Property '{device_property}' of type '{typ}' is not supported.")
     

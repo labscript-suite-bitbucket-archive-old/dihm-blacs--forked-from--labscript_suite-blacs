@@ -761,10 +761,11 @@ class EO(object):
     """Enumeration Output object for control of device properties that only allow
     discrete values."""
     def __init__(self, hardware_name, connection_name, device_name, program_function, 
-                    settings, options, default_value):
+                    settings, options, return_type, default_value):
         self._hardware_name = hardware_name
         self._connection_name = connection_name
         self._widget_list = []
+        self._return_type = return_type
 
         self._device_name = device_name
         self._logger = logging.getLogger('BLACS.%s.%s'%(self._device_name,hardware_name))
@@ -832,7 +833,7 @@ class EO(object):
         self._settings = settings['front_panel_settings'][self._hardware_name]
     
         # Update the state of the button
-        self.set_index(int(self._settings['base_value']),program=program)
+        self.set_value(int(self._settings['base_value']),program=program)
 
         # Update the lock state
         self._update_lock(self._settings['locked'])
@@ -874,7 +875,10 @@ class EO(object):
 
     @property
     def value(self):
-        return self._current_value
+        if self._return_type == 'value':
+            return self._current_value
+        elif self._return_type == 'index':
+            return self._current_index
 
     def lock(self):
         self._update_lock(True)
@@ -893,23 +897,33 @@ class EO(object):
         self._settings['locked'] = locked
 
     def set_value(self,value,program=True):
-        self._current_value = value
-        items = self._comboboxmodel.findItems(value)
-        if items:
-            self._current_index = items[0].data(Qt.UserRole)
-            self._settings['base_value'] = self._current_index
+        '''Update EO & EO widgets to value/index'''
+        if type(value) is int:
+            self.update_by_index(value)
+        elif isinstance(value,str):
+            self.update_by_value(value)
 
         if program:
             self._logger.debug('program device called')
             self._program_device()
 
         for widget in self._widget_list:
-            if value != widget.selected_option:
+            if self._current_value != widget.selected_option:
                 widget.block_combobox_signals()
-                widget.selected_option = value
-                widget.unblock_combobox_signals() 
+                widget.selected_option = self._current_value
+                widget.unblock_combobox_signals()
 
-    def set_index(self,index,program=True):
+    def update_by_value(self,value):
+        self._current_value = value
+        items = self._comboboxmodel.findItems(value)
+        if items:
+            self._current_index = items[0].data(Qt.UserRole)
+            self._settings['base_value'] = self._current_index
+        else:
+            msg = f"""Value {value} not found in model"""
+            raise RuntimeError(msg)
+
+    def update_by_index(self,index):
         self._current_index = index
         self._settings['base_value'] = index
         # find option corresponding to index
@@ -920,16 +934,6 @@ class EO(object):
         else:
             msg = f"""Index {index} not found in model"""
             raise RuntimeError(msg)
-
-        if program:
-            self._logger.debug('program device called')
-            self._program_device()
-
-        for widget in self._widget_list:
-            if index != widget.selected_index:
-                widget.block_combobox_signals()
-                widget.selected_index = index
-                widget.unblock_combobox_signals()
 
     @property
     def name(self):
