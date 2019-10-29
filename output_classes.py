@@ -484,10 +484,12 @@ class DO(object):
 
     def create_widget(self, *args, **kwargs):
         inverted = kwargs.pop("inverted", False)
+        display_name = kwargs.pop("display_name",None)
+        label_text = (self._hardware_name + '\n' + self._connection_name) if display_name is None else display_name
         if not inverted:
-            widget = DigitalOutput('%s\n%s'%(self._hardware_name,self._connection_name),*args,**kwargs)
+            widget = DigitalOutput(label_text,*args,**kwargs)
         else:
-            widget = InvertedDigitalOutput('%s\n%s'%(self._hardware_name,self._connection_name),*args,**kwargs)
+            widget = InvertedDigitalOutput(label_text,*args,**kwargs)
         self.add_widget(widget, inverted=inverted)
         return widget
 

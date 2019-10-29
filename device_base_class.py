@@ -288,8 +288,10 @@ class DeviceTab(Tab):
                 properties.setdefault('parent',None)
                 widgets[dev_prop] = self._devProp[dev_prop].create_widget(properties['display_name'],properties['horizontal_alignment'],properties['parent'])
             else:
+                properties.setdefault('display_name',dev_prop)
                 properties.setdefault('args',[])
                 properties.setdefault('kwargs',{})
+                properties['kwargs']['display_name'] = properties['display_name']
                 widgets[dev_prop] = self._devProp[dev_prop].create_widget(*properties['args'],**properties['kwargs'])
 
         return widgets
